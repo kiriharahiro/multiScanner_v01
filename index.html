@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <title>QR・NFC ハイブリッドスキャナー</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=M+PLUS+1p:wght@400;500;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- html5-qrcode ライブラリ (QRコード高速認識) -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- ヘッダーエリア -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="app-logo-badge">⚡ MULTI-SCAN</div>
+        <h1 class="app-title">ハイブリッドスキャナー</h1>
+      </div>
+      <div class="header-right">
+        <span id="connectionBadge" class="badge online">オンライン</span>
+        <button id="openSettingsBtn" class="icon-btn" title="設定を開く" aria-label="設定">⚙️</button>
+      </div>
+    </header>
+
+    <!-- ステータス・カウンターバー -->
+    <section class="stats-bar">
+      <div class="stat-item">
+        <span class="stat-label">送信待機（保留）</span>
+        <span id="pendingCount" class="stat-value pending">0</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-label">スプレッドシート送信済</span>
+        <span id="syncedCount" class="stat-value synced">0</span>
+      </div>
+    </section>
+
+    <!-- モード切り替えタブ -->
+    <nav class="mode-tabs" role="tablist">
+      <button id="tabQr" class="tab-btn active" role="tab" aria-selected="true">
+        <span class="tab-icon">📷</span>
+        <span class="tab-text">QRスキャナー</span>
+      </button>
+      <button id="tabNfc" class="tab-btn" role="tab" aria-selected="false">
+        <span class="tab-icon">📡</span>
+        <span class="tab-text">NFCリーダー</span>
+      </button>
+    </nav>
+
+    <!-- スキャナー表示領域 -->
+    <main class="scanner-container">
+      <!-- QRコード読み取りビュー -->
+      <div id="qrSection" class="scanner-view active">
+        <div class="camera-wrapper">
+          <div id="qrReader"></div>
+          <div id="qrGuideBox" class="qr-guide-box">
+            <div class="scan-laser"></div>
+          </div>
+        </div>
+        <div class="scanner-controls">
+          <button id="toggleCameraFacingBtn" class="control-btn secondary">
+            <span>🔄</span> カメラ切替
+          </button>
+          <button id="toggleQrScanBtn" class="control-btn primary">
+            <span id="qrBtnIcon">⏸️</span> <span id="qrBtnText">スキャン一時停止</span>
+          </button>
+        </div>
+        <p class="scan-hint">枠内にQRコードをかざすと自動で読み取ります</p>
+      </div>
+
+      <!-- NFCカード読み取りビュー -->
+      <div id="nfcSection" class="scanner-view">
+        <div class="nfc-radar-wrapper">
+          <div class="radar-pulse ring-1"></div>
+          <div class="radar-pulse ring-2"></div>
+          <div class="radar-pulse ring-3"></div>
+          <div class="nfc-card-icon">💳</div>
+        </div>
+        <div class="scanner-controls">
+          <button id="startNfcBtn" class="control-btn primary nfc-active-pulse">
+            <span id="nfcBtnIcon">📡</span> <span id="nfcBtnText">NFCスキャン待機中</span>
+          </button>
+        </div>
+        <p class="scan-hint" id="nfcHintText">スマートフォン背面にカードをタッチしてください</p>
+      </div>
+    </main>
+
+    <!-- 最新の読み取り結果カード -->
+    <section class="latest-card-section">
+      <div class="section-header">
+        <span class="section-title">最新の読取結果</span>
+        <span id="latestTypeBadge" class="type-badge idle">待機中</span>
+      </div>
+      <div class="result-card">
+        <div class="result-main">
+          <div id="latestDataText" class="result-data-text">まだ読み取りデータはありません</div>
+          <div id="latestUidText" class="result-sub-text"></div>
+        </div>
+        <div class="result-footer">
+          <span id="latestTime" class="result-time">--:--:--</span>
+          <span id="latestSyncStatus" class="result-sync status-waiting">待機</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 読み取り履歴ログ -->
+    <section class="history-section">
+      <div class="history-header">
+        <span class="section-title">スキャン履歴 (最新10件)</span>
+        <button id="clearHistoryBtn" class="text-link-btn">履歴クリア</button>
+      </div>
+      <div id="historyEmpty" class="history-empty">
+        <p>カードまたはQRコードをスキャンするとここに表示されます</p>
+      </div>
+      <ul id="historyList" class="history-list"></ul>
+    </section>
+  </div>
+
+  <!-- 設定モーダル -->
+  <div id="settingsModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">⚙️ システム設定</h2>
+        <button id="closeSettingsBtn" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="gasUrlInput">Google Apps Script (GAS) Webアプリ URL</label>
+          <input type="url" id="gasUrlInput" placeholder="https://script.google.com/macros/s/.../exec" spellcheck="false">
+          <span class="form-help">スプレッドシートの「デプロイ」で発行されたURLを貼り付けます</span>
+        </div>
+
+        <div class="form-group">
+          <div class="setting-toggle-row">
+            <div>
+              <span class="setting-name">読み取り成功音（電子音）</span>
+              <p class="setting-desc">ピピッという電子音を鳴らします</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="soundToggle" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="setting-toggle-row">
+            <div>
+              <span class="setting-name">バイブレーション（振動）</span>
+              <p class="setting-desc">スキャン成功時にスマホを振動させます</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="vibrateToggle" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button id="testConnectionBtn" class="control-btn secondary">テスト送信</button>
+          <button id="saveSettingsBtn" class="control-btn primary">設定を保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
